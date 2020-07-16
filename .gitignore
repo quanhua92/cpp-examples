@@ -1,6 +1,11 @@
 # Prerequisites
 *.d
 
+# Clion
+cmake-build-debug
+cmake-build-debug-visual-studio/
+.idea
+
 # Compiled Object files
 *.slo
 *.lo
