@@ -1,3 +1,6 @@
+#ifndef CONCURRENT_QUEUE_HPP
+#define CONCURRENT_QUEUE_HPP
+
 #include <queue>
 #include <mutex>
 #include <memory>
@@ -97,5 +100,5 @@ private:
   std::condition_variable data_cond_;
   std::atomic_bool shutdown_;
 };
-
 }
+#endif //CONCURRENT_QUEUE_HPP
