@@ -122,13 +122,13 @@ public:
   using OutputCallback = std::function<void(const typename PIO::OutputSharedPtr & output)>;
 
   MIMOPipelineModule(const std::string &module_id, const bool &sequential_mode)
-    : PipelineModule(module_id, sequential_mode), output_callbacks_(){}
+    : PipelineModule<Input, Output>(module_id, sequential_mode), output_callbacks_(){}
 
   /**
    * Register a output callback to receive the output payload.
    * This will be called in sendOutputPayload
    */
-   virtual void registerOutputCallback(const typename OutputCallback& callback){
+   virtual void registerOutputCallback(const OutputCallback& callback){
      CHECK(callback) << "callback can't be nullptr";
      output_callbacks_.push_back(callback);
    }
