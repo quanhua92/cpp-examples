@@ -174,7 +174,7 @@ public:
   using InputQueue = concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>;
   using InputQueueSharedPtr = std::shared_ptr<InputQueue>;
 
-  SIMOPipelineModule(InputQueueSharedPtr input_queue, const std::string &module_id, const bool &sequential_mode)
+  SIMOPipelineModule(InputQueueSharedPtr &input_queue, const std::string &module_id, const bool &sequential_mode)
       : MIMOPipelineModule<Input, Output>(module_id, sequential_mode), input_queue_(input_queue){
     CHECK_NOTNULL(input_queue_);
   }
@@ -223,7 +223,7 @@ public:
   using OutputQueue = concurrent_queue::ConcurrentQueue<typename PIO::OutputSharedPtr>;
   using OutputQueueSharedPtr = std::shared_ptr<OutputQueue>;
 
-  MISOPipelineModule(OutputQueueSharedPtr output_queue, const std::string &module_id, const bool &sequential_mode)
+  MISOPipelineModule(OutputQueueSharedPtr &output_queue, const std::string &module_id, const bool &sequential_mode)
       : PipelineModule<Input, Output>(module_id, sequential_mode), output_queue_(output_queue){}
 
 protected:
@@ -253,6 +253,54 @@ private:
   OutputQueueSharedPtr output_queue_;
 };
 
+/**
+ * Single Input (Queue) Single Output (Queue) (SISO) pipeline module
+ * This is still an abstract class, user needs to implement:
+ * - spinOnce()
+ * By default, the single input is handled using an input queue.
+ * By default, the single output is handled using an output queue (inherit from MISO).
+ */
+template <typename Input, typename Output>
+class SISOPipelineModule : public MISOPipelineModule<Input, Output> {
+public:
+  using PIO = PipelineModule<Input, Output>;
+  using MISO = MISOPipelineModule<Input, Output>;
+  using InputQueue = concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>;
+  using InputQueueSharedPtr = std::shared_ptr<InputQueue>;
 
+  SISOPipelineModule(InputQueueSharedPtr &input_queue, typename MISO::OutputQueueSharedPtr &output_queue,
+      const std::string &module_id, const bool &sequential_mode)
+      : MISOPipelineModule<Input, Output>(output_queue, module_id, sequential_mode), input_queue_(input_queue){}
+
+protected:
+
+  typename PIO::InputUniquePtr prepareInputPayload() override {
+    bool success = false;
+    typename PIO::InputUniquePtr value = nullptr;
+    if(PIO::sequential_mode_){
+      success = input_queue_->try_pop(value);
+    } else {
+      success = input_queue_->wait_and_pop(value);
+    }
+    if(success){
+      return value;
+    } else{
+      return nullptr;
+    }
+  }
+
+  /**
+   * This function handles shutting down the output queue.
+   */
+  void shutdownQueues() override {
+    if(input_queue_){
+      input_queue_->shutdown();
+    }
+    MISO::shutdownQueues();
+  }
+
+private:
+  InputQueueSharedPtr input_queue_;
+};
 }
 #endif //MODULAR_PIPELINE_PIPELINE_MODULE_HPP

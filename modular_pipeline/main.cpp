@@ -29,7 +29,7 @@ SIMO::InputQueueSharedPtr simo_input_queue = std::make_shared<SIMO::InputQueue>(
 
 class ExampleSIMOPipelineModule : public SIMO {
 public:
-  ExampleSIMOPipelineModule(SIMO::InputQueueSharedPtr input_queue, const std::string module_id, bool sequential_mode)
+  ExampleSIMOPipelineModule(SIMO::InputQueueSharedPtr &input_queue, const std::string module_id, bool sequential_mode)
       :SIMO(input_queue, module_id, sequential_mode) {
   }
 
@@ -55,13 +55,33 @@ protected:
   }
 
 public:
-  ExampleMISOPipelineModule(OutputQueueSharedPtr output_queue, const std::string module_id, bool sequential_mode)
+  ExampleMISOPipelineModule(OutputQueueSharedPtr &output_queue, const std::string module_id, bool sequential_mode)
       :MISO(output_queue, module_id, sequential_mode) {
   }
 };
 
 MISO::OutputQueueSharedPtr miso_output_queue = std::make_shared<MISO::OutputQueue>();
 ExampleMISOPipelineModule miso_pipeline_module(miso_output_queue,"ExampleMISOPipelineModule", false);
+
+using SISO = modular_pipeline::SISOPipelineModule<std::string, std::string>;
+
+class ExampleSISOPipelineModule : public SISO {
+protected:
+  PIO::OutputSharedPtr spinOnce(PIO::InputUniquePtr input) override{
+    std::string output_string = "[Output SISO] = " + *input.get();
+    return std::make_shared<std::string>(output_string);
+  }
+
+public:
+  ExampleSISOPipelineModule(SISO::InputQueueSharedPtr &input_queue, SISO::OutputQueueSharedPtr &output_queue,
+      const std::string module_id, bool sequential_mode)
+      :SISO(input_queue, output_queue, module_id, sequential_mode) {
+  }
+};
+
+SISO::InputQueueSharedPtr siso_input_queue = std::make_shared<SISO::InputQueue>();
+SISO::OutputQueueSharedPtr siso_output_queue = std::make_shared<SISO::OutputQueue>();
+ExampleSISOPipelineModule siso_pipeline_module(siso_input_queue, siso_output_queue,"ExampleSISOPipelineModule", false);
 
 void my_callback(const OutputSharedPtr &output){
   LOG(INFO) << "CB_1 receives: " << *output.get();
@@ -81,6 +101,10 @@ void simo_worker(){
 
 void miso_worker(){
   miso_pipeline_module.spin();
+}
+
+void siso_worker(){
+  siso_pipeline_module.spin();
 }
 
 int main(int argc, char* argv[]){
@@ -111,7 +135,7 @@ int main(int argc, char* argv[]){
   t1.join();
 #endif
 
-#if 1
+#if 0
   std::thread t1(miso_worker);
   for(int i =0 ; i < 5; i++){
     MISO::OutputSharedPtr output;
@@ -123,6 +147,29 @@ int main(int argc, char* argv[]){
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   miso_pipeline_module.shutdown();
+  t1.join();
+#endif
+
+#if 1
+  siso_input_queue->push(std::make_unique<std::string>("Message 01"));
+  siso_input_queue->push(std::make_unique<std::string>("Message 02"));
+  siso_input_queue->push(std::make_unique<std::string>("Message 03"));
+  siso_input_queue->push(std::make_unique<std::string>("Message 04"));
+  siso_input_queue->push(std::make_unique<std::string>("Message 05"));
+
+  std::thread t1(siso_worker);
+
+  for(int i =0 ; i < 5; i++){
+    SISO::OutputSharedPtr output;
+    bool status = siso_output_queue->wait_and_pop(output);
+    if(status){
+      LOG(INFO) << "SISO Output Queue receives: " << *output.get();
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  siso_pipeline_module.shutdown();
   t1.join();
 #endif
   return 1;
