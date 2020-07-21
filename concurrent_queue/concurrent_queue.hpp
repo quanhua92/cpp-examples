@@ -61,6 +61,17 @@ public:
     return res;
   }
 
+  // pop without waiting for data availability. If empty queue the return false.
+  // the caller has to implement the wait functionality explicitly.
+  // if need wait for data, use `wait_and_pop()`
+  bool try_pop(T& value){
+    std::lock_guard<std::mutex> lk(mutex_);
+    if(data_queue_.empty() || shutdown_) return false;
+    value = std::move(*data_queue_.front());
+    data_queue_.pop();
+    return true;
+  }
+
   // check if the queue is empty
   bool empty() const {
     std::lock_guard<std::mutex> lk(mutex_);

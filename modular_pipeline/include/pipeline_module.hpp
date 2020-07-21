@@ -2,6 +2,7 @@
 #define MODULAR_PIPELINE_PIPELINE_MODULE_HPP
 #include <atomic>
 #include <memory>
+#include "concurrent_queue.hpp"
 
 namespace modular_pipeline {
 
@@ -67,7 +68,7 @@ public:
   /**
    * Return True if the module is processing data. False if waiting for input.
    */
-  inline bool isWorking() const{
+  virtual inline bool isWorking() const{
     return is_working_;
   }
 protected:
@@ -96,7 +97,8 @@ protected:
   virtual inline std::string logPrefix(){
     return "Module [" + module_id_  + "]: ";
   }
-private:
+
+protected:
   std::atomic_bool is_working_;
   std::atomic_bool shutdown_;
   std::string module_id_;
@@ -108,9 +110,9 @@ private:
  * This is still an abstract class, user needs to implement:
  * - prepareInputPayload()
  * - spinOnce()
- * - shutdownQueues()
  * By default, the multiple outputs are handled using callbacks
- * We don't know how the user wants with multiple inputs.
+ * We don't know how the user wants with multiple inputs. Therefore, the prepareInputPayload is virtual.
+ * We assume that there is no queue by default. If user uses a input/output queue, must implement shutdownQueues()
  * Note:
  * - One can receive multiple inputs via callbacks. Then, create an input payload in getInputPayload() method.
  * - One can override the sendOutputPayload() to send data to multiple queues and callbacks.
@@ -146,8 +148,62 @@ protected:
     return true;
   }
 
+  /**
+   * This function handles shutting down all the queues. User needs to override this to handle queues if needed.
+   */
+   void shutdownQueues() override {};
+
 private:
   std::vector<OutputCallback> output_callbacks_;
+};
+
+/**
+ * SIMOPipelineModule Single Input (Queue) Multiple Outputs (callbacks)
+ * This module inherits MIMO for the callbacks part.
+ * Receive inputs via a thread-safe queue and send outputs via callbacks.
+ * This is still an abstract class, user needs to implement:
+ * - spinOnce(): calculate the output payload from input payload
+ * Note:
+ * - If once implements Multiple output via queues then need to override shutdownQueues to handle both input and
+ * output queues.
+ */
+template <typename Input, typename Output>
+class SIMOPipelineModule : public MIMOPipelineModule<Input, Output> {
+public:
+  using PIO = PipelineModule<Input, Output>;
+  using OutputCallback = std::function<void(const typename PIO::OutputSharedPtr &output)>;
+  using InputQueue = concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>;
+
+  SIMOPipelineModule(InputQueue* input_queue, const std::string &module_id, const bool &sequential_mode)
+      : MIMOPipelineModule<Input, Output>(module_id, sequential_mode), input_queue_(input_queue){
+    CHECK_NOTNULL(input_queue_);
+  }
+  virtual ~SIMOPipelineModule() = default;
+
+protected:
+  typename PIO::InputUniquePtr prepareInputPayload() override {
+    bool success = false;
+    typename PIO::InputUniquePtr value = nullptr;
+    if(PIO::sequential_mode_){
+      success = input_queue_->try_pop(value);
+    } else {
+      success = input_queue_->wait_and_pop(value);
+    }
+    if(success){
+      return value;
+    } else{
+      return nullptr;
+    }
+  }
+
+  void shutdownQueues() override {
+    if(input_queue_){
+      input_queue_->shutdown();
+    }
+  }
+
+private:
+  InputQueue *input_queue_;
 };
 
 }

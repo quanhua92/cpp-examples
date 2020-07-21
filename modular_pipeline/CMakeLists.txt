@@ -8,6 +8,7 @@ include(../cmake/SetEnv.cmake)
 include(../cmake/Glog.cmake)
 
 include_directories("include")
+include_directories("../concurrent_queue")
 
 add_executable(modular_pipeline main.cpp include/pipeline_module.hpp)
 target_link_libraries(modular_pipeline PRIVATE glog::glog)
