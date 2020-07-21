@@ -111,7 +111,7 @@ protected:
  * - prepareInputPayload()
  * - spinOnce()
  * By default, the multiple outputs are handled using callbacks
- * We don't know how the user wants with multiple inputs. Therefore, the prepareInputPayload is virtual.
+ * We don't know how the user wants with multiple inputs.
  * We assume that there is no queue by default. If user uses a input/output queue, must implement shutdownQueues()
  * Note:
  * - One can receive multiple inputs via callbacks. Then, create an input payload in getInputPayload() method.
@@ -171,10 +171,10 @@ template <typename Input, typename Output>
 class SIMOPipelineModule : public MIMOPipelineModule<Input, Output> {
 public:
   using PIO = PipelineModule<Input, Output>;
-  using OutputCallback = std::function<void(const typename PIO::OutputSharedPtr &output)>;
-  using InputQueue = std::shared_ptr<concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>>;
+  using InputQueue = concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>;
+  using InputQueueSharedPtr = std::shared_ptr<InputQueue>;
 
-  SIMOPipelineModule(InputQueue input_queue, const std::string &module_id, const bool &sequential_mode)
+  SIMOPipelineModule(InputQueueSharedPtr input_queue, const std::string &module_id, const bool &sequential_mode)
       : MIMOPipelineModule<Input, Output>(module_id, sequential_mode), input_queue_(input_queue){
     CHECK_NOTNULL(input_queue_);
   }
@@ -203,8 +203,56 @@ protected:
   }
 
 private:
-  InputQueue input_queue_;
+  InputQueueSharedPtr input_queue_;
 };
+
+/**
+ * Multiple Input Single Output (Queue) (MISO) pipeline module
+ * This is still an abstract class, user needs to implement:
+ * - prepareInputPayload()
+ * - spinOnce()
+ * By default, the single output is handled using an output queue.
+ * We don't know how the user wants with multiple inputs.
+ * Note:
+ * - One can receive multiple inputs via callbacks. Then, create an input payload in getInputPayload() method.
+ */
+template <typename Input, typename Output>
+class MISOPipelineModule : public PipelineModule<Input, Output> {
+public:
+  using PIO = PipelineModule<Input, Output>;
+  using OutputQueue = concurrent_queue::ConcurrentQueue<typename PIO::OutputSharedPtr>;
+  using OutputQueueSharedPtr = std::shared_ptr<OutputQueue>;
+
+  MISOPipelineModule(OutputQueueSharedPtr output_queue, const std::string &module_id, const bool &sequential_mode)
+      : PipelineModule<Input, Output>(module_id, sequential_mode), output_queue_(output_queue){}
+
+protected:
+
+  /**
+   * This function will call a set of output callbacks to send the output payload
+   * @param output : the output payload created by spinOnce()
+   * @return False if can not send the output payload
+   */
+  bool sendOutputPayload(typename PIO::OutputSharedPtr output) override {
+    if(output_queue_){
+      return output_queue_->push(output);
+    }
+    return false;
+  }
+
+  /**
+   * This function handles shutting down the output queue.
+   */
+  void shutdownQueues() override {
+    if(output_queue_){
+      output_queue_->shutdown();
+    }
+  }
+
+private:
+  OutputQueueSharedPtr output_queue_;
+};
+
 
 }
 #endif //MODULAR_PIPELINE_PIPELINE_MODULE_HPP
