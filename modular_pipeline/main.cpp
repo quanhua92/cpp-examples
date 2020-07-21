@@ -26,11 +26,12 @@ ExampleMIMOPipelineModule pipeline_module("ExampleMIMOPipelineModule", false);
 
 using SIMO = modular_pipeline::SIMOPipelineModule<std::string, std::string>;
 using SIMOQueue = concurrent_queue::ConcurrentQueue<SIMO::InputUniquePtr>;
-SIMOQueue *simo_input_queue = new SIMOQueue();
+using SIMOQueueSharedPtr = std::shared_ptr<SIMOQueue>;
+SIMOQueueSharedPtr simo_input_queue = std::make_shared<SIMOQueue>();
 
 class ExampleSIMOPipelineModule : public SIMO {
 public:
-  ExampleSIMOPipelineModule(concurrent_queue::ConcurrentQueue<PIO::InputUniquePtr> *input_queue, const std::string module_id, bool sequential_mode)
+  ExampleSIMOPipelineModule(SIMOQueueSharedPtr input_queue, const std::string module_id, bool sequential_mode)
       :SIMO(input_queue, module_id, sequential_mode) {
   }
 

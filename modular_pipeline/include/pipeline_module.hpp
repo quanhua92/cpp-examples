@@ -172,9 +172,9 @@ class SIMOPipelineModule : public MIMOPipelineModule<Input, Output> {
 public:
   using PIO = PipelineModule<Input, Output>;
   using OutputCallback = std::function<void(const typename PIO::OutputSharedPtr &output)>;
-  using InputQueue = concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>;
+  using InputQueue = std::shared_ptr<concurrent_queue::ConcurrentQueue<typename PIO::InputUniquePtr>>;
 
-  SIMOPipelineModule(InputQueue* input_queue, const std::string &module_id, const bool &sequential_mode)
+  SIMOPipelineModule(InputQueue input_queue, const std::string &module_id, const bool &sequential_mode)
       : MIMOPipelineModule<Input, Output>(module_id, sequential_mode), input_queue_(input_queue){
     CHECK_NOTNULL(input_queue_);
   }
@@ -203,7 +203,7 @@ protected:
   }
 
 private:
-  InputQueue *input_queue_;
+  InputQueue input_queue_;
 };
 
 }
